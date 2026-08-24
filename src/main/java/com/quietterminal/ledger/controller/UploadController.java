@@ -60,10 +60,13 @@ public class UploadController {
 
     @PostMapping
     public ResponseEntity<UploadView> upload(@AuthenticationPrincipal LedgerPrincipal principal,
-            @RequestParam("file") MultipartFile file, @RequestParam("bucket") String bucket) {
+            @RequestParam("file") MultipartFile file, @RequestParam("bucket") String bucket,
+            @RequestParam(name = "path", defaultValue = "") String path) {
         if (file == null || file.isEmpty()) {
             throw new UploadInvalidException("An uploaded file is required.");
         }
+        String parentPath = normalizePath(path);
+        assertPathExists(bucket, parentPath);
         User uploader = userRepository.findById(principal.userId())
                 .orElseThrow(() -> new UserNotFoundException("No user found with id " + principal.userId() + "."));
 
@@ -76,28 +79,39 @@ public class UploadController {
             throw new UploadStorageException("Could not read uploaded file: " + e.getMessage());
         }
 
-        Upload upload = new Upload(fileName, file.getContentType(), file.getSize(), objectKey, bucket, uploader);
+        Upload upload = new Upload(fileName, file.getContentType(), file.getSize(), objectKey, bucket, parentPath,
+                uploader);
         uploadRepository.save(upload);
         eventPublisher.publishEvent(new UploadCreatedEvent(upload));
         return ResponseEntity.status(HttpStatus.CREATED).body(toView(upload));
     }
 
     @GetMapping
-    public List<UploadView> listUploads() {
-        return uploadRepository.findAllByOrderByUploadedAtDesc().stream().map(UploadController::toView).toList();
+    public List<UploadView> listUploads(@RequestParam(name = "bucket", required = false) String bucket,
+            @RequestParam(name = "path", defaultValue = "") String path) {
+        String parentPath = normalizePath(path);
+        if (!parentPath.isEmpty() && (bucket == null || bucket.isBlank())) {
+            throw new UploadInvalidException("A bucket is required when browsing into a folder.");
+        }
+        List<Upload> uploads = parentPath.isEmpty()
+                ? uploadRepository.findAllByParentPathOrderByUploadedAtDesc("")
+                : uploadRepository.findAllByBucketAndParentPathOrderByUploadedAtDesc(bucket, parentPath);
+        return uploads.stream().map(UploadController::toView).toList();
     }
 
     @PostMapping("/directory")
     public ResponseEntity<UploadView> createDirectory(@AuthenticationPrincipal LedgerPrincipal principal,
             @RequestBody CreateDirectoryRequest request) {
         String name = sanitizeDirectoryName(request.name());
+        String parentPath = normalizePath(request.parentPath());
+        assertPathExists(request.bucket(), parentPath);
         User creator = userRepository.findById(principal.userId())
                 .orElseThrow(() -> new UserNotFoundException("No user found with id " + principal.userId() + "."));
 
         String objectKey = UUID.randomUUID() + "-" + name + "/";
         uploadStorage.put(request.bucket(), objectKey, new ByteArrayInputStream(new byte[0]), 0, DIRECTORY_CONTENT_TYPE);
 
-        Upload upload = new Upload(name, DIRECTORY_CONTENT_TYPE, 0, objectKey, request.bucket(), creator);
+        Upload upload = new Upload(name, DIRECTORY_CONTENT_TYPE, 0, objectKey, request.bucket(), parentPath, creator);
         uploadRepository.save(upload);
         return ResponseEntity.status(HttpStatus.CREATED).body(toView(upload));
     }
@@ -106,6 +120,11 @@ public class UploadController {
     public ResponseEntity<Void> deleteUpload(@PathVariable("id") UUID id) {
         Upload upload = uploadRepository.findById(id)
                 .orElseThrow(() -> new UploadNotFoundException("No upload found with id " + id + "."));
+        if (isDirectory(upload)) {
+            List<Upload> descendants = uploadRepository.findAllUnderPath(upload.getBucket(), fullPath(upload));
+            descendants.forEach(descendant -> uploadStorage.remove(descendant.getBucket(), descendant.getObjectKey()));
+            uploadRepository.deleteAll(descendants);
+        }
         uploadStorage.remove(upload.getBucket(), upload.getObjectKey());
         uploadRepository.delete(upload);
         return ResponseEntity.noContent().build();
@@ -160,15 +179,56 @@ public class UploadController {
         return trimmed;
     }
 
+    private static String normalizePath(String path) {
+        if (path == null) {
+            return "";
+        }
+        String trimmed = path.trim();
+        while (trimmed.startsWith("/")) {
+            trimmed = trimmed.substring(1);
+        }
+        while (trimmed.endsWith("/")) {
+            trimmed = trimmed.substring(0, trimmed.length() - 1);
+        }
+        return trimmed;
+    }
+
+    private void assertPathExists(String bucket, String path) {
+        if (path.isEmpty()) {
+            return;
+        }
+        if (bucket == null || bucket.isBlank()) {
+            throw new UploadInvalidException("A bucket is required when uploading into a folder.");
+        }
+        int lastSlash = path.lastIndexOf('/');
+        String parent = lastSlash >= 0 ? path.substring(0, lastSlash) : "";
+        String name = lastSlash >= 0 ? path.substring(lastSlash + 1) : path;
+        boolean exists = uploadRepository.findAllByBucketAndParentPathOrderByUploadedAtDesc(bucket, parent).stream()
+                .anyMatch(u -> isDirectory(u) && u.getFileName().equals(name));
+        if (!exists) {
+            throw new UploadInvalidException("Folder '" + path + "' does not exist in bucket '" + bucket + "'.");
+        }
+    }
+
+    private static boolean isDirectory(Upload upload) {
+        return DIRECTORY_CONTENT_TYPE.equals(upload.getContentType());
+    }
+
+    private static String fullPath(Upload upload) {
+        return upload.getParentPath().isEmpty() ? upload.getFileName()
+                : upload.getParentPath() + "/" + upload.getFileName();
+    }
+
     private static UploadView toView(Upload upload) {
         return new UploadView(upload.getUUID(), upload.getFileName(), upload.getContentType(),
-                upload.getSizeBytes(), upload.getBucket(), upload.getUploadedBy().getUUID(), upload.getUploadedAt());
+                upload.getSizeBytes(), upload.getBucket(), upload.getParentPath(), isDirectory(upload),
+                upload.getUploadedBy().getUUID(), upload.getUploadedAt());
     }
 
     public record UploadView(UUID id, String fileName, String contentType, long sizeBytes, String bucket,
-            UUID uploadedBy, Instant uploadedAt) {
+            String parentPath, boolean directory, UUID uploadedBy, Instant uploadedAt) {
     }
 
-    public record CreateDirectoryRequest(String bucket, String name) {
+    public record CreateDirectoryRequest(String bucket, String name, String parentPath) {
     }
 }

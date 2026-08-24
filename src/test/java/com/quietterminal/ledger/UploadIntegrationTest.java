@@ -189,6 +189,106 @@ class UploadIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void canUploadIntoAFolderAndListItsContents() throws Exception {
+        createDirectory("reports", "");
+
+        mockMvc.perform(multipart("/uploads")
+                        .file(new MockMultipartFile("file", "q1.txt", "text/plain", "hello".getBytes()))
+                        .param("bucket", "ledger-uploads-test")
+                        .param("path", "reports")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.parentPath").value("reports"));
+
+        uploadFile("outside.txt");
+
+        String rootJson = mockMvc.perform(get("/uploads").header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> rootNames = JsonPath.read(rootJson, "$[*].fileName");
+        assertTrue(rootNames.contains("reports"));
+        assertTrue(rootNames.contains("outside.txt"));
+        assertFalse(rootNames.contains("q1.txt"));
+
+        String folderJson = mockMvc.perform(get("/uploads")
+                        .param("bucket", "ledger-uploads-test")
+                        .param("path", "reports")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        List<String> folderNames = JsonPath.read(folderJson, "$[*].fileName");
+        assertEquals(List.of("q1.txt"), folderNames);
+    }
+
+    @Test
+    void uploadingIntoANonExistentFolderIsRejected() throws Exception {
+        mockMvc.perform(multipart("/uploads")
+                        .file(new MockMultipartFile("file", "q1.txt", "text/plain", "hello".getBytes()))
+                        .param("bucket", "ledger-uploads-test")
+                        .param("path", "does-not-exist")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void canCreateANestedFolder() throws Exception {
+        createDirectory("reports", "");
+
+        String responseJson = mockMvc.perform(post("/uploads/directory")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bucket\":\"ledger-uploads-test\",\"name\":\"2024\",\"parentPath\":\"reports\"}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.parentPath").value("reports"))
+                .andReturn().getResponse().getContentAsString();
+
+        String id = JsonPath.read(responseJson, "$.id");
+        Upload stored = uploadRepository.findById(UUID.fromString(id)).orElseThrow();
+        assertEquals("2024", stored.getFileName());
+        assertEquals("reports", stored.getParentPath());
+    }
+
+    @Test
+    void creatingAFolderUnderANonExistentParentIsRejected() throws Exception {
+        mockMvc.perform(post("/uploads/directory")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bucket\":\"ledger-uploads-test\",\"name\":\"2024\",\"parentPath\":\"does-not-exist\"}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deletingAFolderRecursivelyDeletesItsContents() throws Exception {
+        String folderId = createDirectory("reports", "");
+        String fileResponse = mockMvc.perform(multipart("/uploads")
+                        .file(new MockMultipartFile("file", "q1.txt", "text/plain", "hello".getBytes()))
+                        .param("bucket", "ledger-uploads-test")
+                        .param("path", "reports")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String fileId = JsonPath.read(fileResponse, "$.id");
+
+        mockMvc.perform(delete("/uploads/{id}", folderId).header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isNoContent());
+
+        verify(uploadStorage, org.mockito.Mockito.times(2)).remove(eq("ledger-uploads-test"), anyString());
+        assertFalse(uploadRepository.findById(UUID.fromString(folderId)).isPresent());
+        assertFalse(uploadRepository.findById(UUID.fromString(fileId)).isPresent());
+    }
+
+    private String createDirectory(String name, String parentPath) throws Exception {
+        String responseJson = mockMvc.perform(post("/uploads/directory")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bucket\":\"ledger-uploads-test\",\"name\":\"" + name + "\",\"parentPath\":\""
+                                + parentPath + "\"}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return JsonPath.read(responseJson, "$.id");
+    }
+
     private void uploadFile(String name) throws Exception {
         MockMultipartFile file = new MockMultipartFile("file", name, "text/plain", "hello".getBytes());
         mockMvc.perform(multipart("/uploads")

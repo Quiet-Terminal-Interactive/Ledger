@@ -1443,23 +1443,104 @@
     return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
   }
 
+  let filesState = { bucket: null, path: "" };
+
+  function renderFilesBreadcrumb() {
+    const container = el("files-path");
+    container.innerHTML = "";
+    const rootBtn = document.createElement("button");
+    rootBtn.type = "button";
+    rootBtn.className = "breadcrumb-link";
+    rootBtn.textContent = "Files";
+    rootBtn.addEventListener("click", () => {
+      filesState = { bucket: null, path: "" };
+      loadUploadList();
+    });
+    container.appendChild(rootBtn);
+
+    if (filesState.path) {
+      container.appendChild(document.createTextNode(` / ${filesState.bucket} / `));
+      const segments = filesState.path.split("/");
+      let cumulative = "";
+      segments.forEach((segment, idx) => {
+        cumulative = cumulative ? `${cumulative}/${segment}` : segment;
+        const isLast = idx === segments.length - 1;
+        if (isLast) {
+          const span = document.createElement("span");
+          span.textContent = segment;
+          container.appendChild(span);
+        } else {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "breadcrumb-link";
+          btn.textContent = segment;
+          const targetPath = cumulative;
+          btn.addEventListener("click", () => {
+            filesState = { bucket: filesState.bucket, path: targetPath };
+            loadUploadList();
+          });
+          container.appendChild(btn);
+          container.appendChild(document.createTextNode(" / "));
+        }
+      });
+    }
+  }
+
+  function updateFilesFormScope() {
+    const inFolder = !!filesState.path;
+    const uploadBucket = el("upload-bucket");
+    const mkdirBucket = el("mkdir-bucket");
+    uploadBucket.readOnly = inFolder;
+    mkdirBucket.readOnly = inFolder;
+    if (inFolder) {
+      uploadBucket.value = filesState.bucket;
+      mkdirBucket.value = filesState.bucket;
+    }
+  }
+
+  function openFolder(bucket, path) {
+    filesState = { bucket, path };
+    loadUploadList();
+  }
+
   async function loadUploadList() {
+    renderFilesBreadcrumb();
+    updateFilesFormScope();
     const list = el("upload-list");
+    const params = new URLSearchParams();
+    if (filesState.path) {
+      params.set("bucket", filesState.bucket);
+      params.set("path", filesState.path);
+    }
     let uploads;
     try {
-      uploads = await api("/uploads");
+      uploads = await api(`/uploads${params.toString() ? "?" + params.toString() : ""}`);
     } catch (e) {
       list.innerHTML = `<p class="empty-state">Couldn't load files: ${escapeHtml(e.message)}</p>`;
       return;
     }
     list.innerHTML = "";
+    if (filesState.path) {
+      const upCard = document.createElement("div");
+      upCard.className = "ticket-card";
+      upCard.innerHTML = `<div class="ticket-card-top"><strong>.. (up)</strong></div>`;
+      upCard.addEventListener("click", () => {
+        const parts = filesState.path.split("/");
+        parts.pop();
+        openFolder(filesState.bucket, parts.join("/"));
+      });
+      list.appendChild(upCard);
+    }
     if (!uploads.length) {
-      list.innerHTML = `<p class="empty-state">No files uploaded yet.</p>`;
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent = filesState.path ? "This folder is empty." : "No files uploaded yet.";
+      list.appendChild(empty);
       return;
     }
     const canWrite = hasPermission("FILES_WRITE");
     uploads.forEach((upload) => {
-      const isDirectory = upload.contentType === "application/x-directory";
+      const isDirectory = upload.directory;
       const card = document.createElement("div");
       card.className = "ticket-card";
       card.innerHTML = `
@@ -1478,11 +1559,14 @@
           <span>${formatDateTime(upload.uploadedAt)}</span>
         </div>
         <div class="ticket-actions">
-          ${isDirectory ? "" : '<button type="button" class="pill small download-btn">Download</button>'}
+          ${isDirectory ? '<button type="button" class="pill small open-btn">Open</button>' : '<button type="button" class="pill small download-btn">Download</button>'}
           ${canWrite ? '<button type="button" class="pill small danger delete-btn">Delete</button>' : ""}
         </div>
       `;
-      if (!isDirectory) {
+      if (isDirectory) {
+        const fullPath = upload.parentPath ? `${upload.parentPath}/${upload.fileName}` : upload.fileName;
+        card.querySelector(".open-btn").addEventListener("click", () => openFolder(upload.bucket, fullPath));
+      } else {
         card.querySelector(".download-btn").addEventListener("click", () => downloadUpload(upload.id, upload.fileName));
       }
       if (canWrite) {
@@ -1534,10 +1618,11 @@
     const formData = new FormData();
     formData.append("file", file);
     formData.append("bucket", el("upload-bucket").value.trim());
+    formData.append("path", filesState.path);
     try {
       await api("/uploads", { method: "POST", body: formData });
       el("upload-form").reset();
-      el("upload-bucket").value = "ledger-uploads";
+      updateFilesFormScope();
       showToast("File uploaded.");
       loadUploadList();
     } catch (err) {
@@ -1554,7 +1639,7 @@
   el("mkdir-cancel-btn").addEventListener("click", () => {
     el("mkdir-form").hidden = true;
     el("mkdir-form").reset();
-    el("mkdir-bucket").value = "ledger-uploads";
+    updateFilesFormScope();
     el("mkdir-error").hidden = true;
     el("new-folder-btn").hidden = false;
   });
@@ -1566,9 +1651,12 @@
     const bucket = el("mkdir-bucket").value.trim();
     const name = el("mkdir-name").value.trim();
     try {
-      await api("/uploads/directory", { method: "POST", body: JSON.stringify({ bucket, name }) });
+      await api("/uploads/directory", {
+        method: "POST",
+        body: JSON.stringify({ bucket, name, parentPath: filesState.path }),
+      });
       el("mkdir-form").reset();
-      el("mkdir-bucket").value = "ledger-uploads";
+      updateFilesFormScope();
       el("mkdir-form").hidden = true;
       el("new-folder-btn").hidden = false;
       showToast("Folder created.");

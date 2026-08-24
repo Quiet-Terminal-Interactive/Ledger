@@ -11,7 +11,12 @@ import com.quietterminal.ledger.entity.Upload;
 
 public interface UploadRepository extends JpaRepository<Upload, UUID> {
 
-    List<Upload> findAllByOrderByUploadedAtDesc();
+    List<Upload> findAllByParentPathOrderByUploadedAtDesc(String parentPath);
+
+    List<Upload> findAllByBucketAndParentPathOrderByUploadedAtDesc(String bucket, String parentPath);
+
+    @Query("SELECT u FROM Upload u WHERE u.bucket = :bucket AND (u.parentPath = :path OR u.parentPath LIKE CONCAT(:path, '/%'))")
+    List<Upload> findAllUnderPath(@Param("bucket") String bucket, @Param("path") String path);
 
     List<Upload> findByFileNameContainingIgnoreCase(String fileNameFragment);
 

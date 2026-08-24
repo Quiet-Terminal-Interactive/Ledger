@@ -86,7 +86,7 @@ class NotificationEventListenerTest {
     void uploadCreatedNotifiesWithFileName() {
         Notifier notifier = mock(Notifier.class);
         NotificationEventListener listener = new NotificationEventListener(List.of(notifier), usd);
-        Upload upload = new Upload("bear-ref.png", "image/png", 1024L, "key", "bucket", kohan);
+        Upload upload = new Upload("bear-ref.png", "image/png", 1024L, "key", "bucket", "", kohan);
 
         listener.onUploadCreated(new UploadCreatedEvent(upload));
 

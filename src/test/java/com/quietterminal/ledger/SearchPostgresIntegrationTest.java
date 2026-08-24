@@ -87,7 +87,7 @@ class SearchPostgresIntegrationTest {
         createTask("Rework budget dashboard", "Needs a chart for monthly spend");
         createWikiPage("finance/budget", "Budget Process", "How the team tracks spend");
         uploadRepository.save(new com.quietterminal.ledger.entity.Upload("budget-report.pdf", "application/pdf",
-                1024L, "objects/budget-report.pdf", "ledger-uploads", admin));
+                1024L, "objects/budget-report.pdf", "ledger-uploads", "", admin));
         createTask("Unrelated task", "Nothing to do with money");
 
         String responseJson = mockMvc.perform(get("/search").param("q", "budget")

@@ -603,6 +603,19 @@ textarea {
   padding-top: 0.75rem;
 }
 
+.breadcrumb-link {
+  border: none;
+  background: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+}
+
+.breadcrumb-link:hover {
+  text-decoration: underline;
+}
+
 .assign-row {
   display: flex;
   flex-wrap: wrap;

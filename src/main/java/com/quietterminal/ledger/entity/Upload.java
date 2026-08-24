@@ -37,6 +37,9 @@ public class Upload {
     @Column(name = "bucket", nullable = false, updatable = false)
     private String bucket;
 
+    @Column(name = "parent_path", nullable = false, updatable = false)
+    private String parentPath;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "uploaded_by", nullable = false, updatable = false)
     private User uploadedBy;
@@ -48,7 +51,7 @@ public class Upload {
     }
 
     public Upload(String fileName, String contentType, long sizeBytes, String objectKey, String bucket,
-            User uploadedBy) {
+            String parentPath, User uploadedBy) {
         Objects.requireNonNull(objectKey, "Object key cannot be null.");
         Objects.requireNonNull(bucket, "Bucket cannot be null.");
         Objects.requireNonNull(uploadedBy, "Uploader cannot be null.");
@@ -62,6 +65,7 @@ public class Upload {
         this.sizeBytes = sizeBytes;
         this.objectKey = objectKey;
         this.bucket = bucket;
+        this.parentPath = parentPath == null ? "" : parentPath;
         this.uploadedBy = uploadedBy;
         this.uploadedAt = Instant.now();
     }
@@ -88,6 +92,10 @@ public class Upload {
 
     public String getBucket() {
         return bucket;
+    }
+
+    public String getParentPath() {
+        return parentPath;
     }
 
     public User getUploadedBy() {
