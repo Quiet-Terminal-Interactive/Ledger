@@ -1,16 +1,22 @@
 package com.quietterminal.ledger.controller;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -21,6 +27,7 @@ import com.quietterminal.ledger.entity.Upload;
 import com.quietterminal.ledger.entity.User;
 import com.quietterminal.ledger.error.LedgerError;
 import com.quietterminal.ledger.error.UploadInvalidException;
+import com.quietterminal.ledger.error.UploadNotFoundException;
 import com.quietterminal.ledger.error.UploadStorageException;
 import com.quietterminal.ledger.error.UserNotFoundException;
 import com.quietterminal.ledger.event.UploadCreatedEvent;
@@ -75,9 +82,30 @@ public class UploadController {
         return uploadRepository.findAllByOrderByUploadedAtDesc().stream().map(UploadController::toView).toList();
     }
 
+    @GetMapping("/{id}/content")
+    public ResponseEntity<InputStreamResource> downloadContent(@PathVariable("id") UUID id) {
+        Upload upload = uploadRepository.findById(id)
+                .orElseThrow(() -> new UploadNotFoundException("No upload found with id " + id + "."));
+
+        InputStream data = uploadStorage.get(upload.getBucket(), upload.getObjectKey());
+        MediaType contentType = upload.getContentType() != null && !upload.getContentType().isBlank()
+                ? MediaType.parseMediaType(upload.getContentType())
+                : MediaType.APPLICATION_OCTET_STREAM;
+        String disposition = ContentDisposition.attachment()
+                .filename(upload.getFileName(), StandardCharsets.UTF_8)
+                .build()
+                .toString();
+
+        return ResponseEntity.ok()
+                .contentType(contentType)
+                .header("Content-Disposition", disposition)
+                .body(new InputStreamResource(data));
+    }
+
     @ExceptionHandler(LedgerError.class)
     public ResponseEntity<String> handleLedgerError(LedgerError e) {
-        HttpStatus status = e instanceof UserNotFoundException ? HttpStatus.NOT_FOUND
+        HttpStatus status = e instanceof UserNotFoundException || e instanceof UploadNotFoundException
+                ? HttpStatus.NOT_FOUND
                 : e instanceof UploadStorageException ? HttpStatus.BAD_GATEWAY
                         : HttpStatus.BAD_REQUEST;
         return ResponseEntity.status(status).body(e.getMessage());

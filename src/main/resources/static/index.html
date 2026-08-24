@@ -71,6 +71,9 @@
         <a href="#" class="nav-link" data-view="budget">Budget</a>
         <a href="#" class="nav-link" data-view="wiki">Wiki</a>
         <a href="#" class="nav-link" data-view="search">Search</a>
+        <a href="#" class="nav-link" data-view="repos" id="repos-nav-link" hidden>Repos</a>
+        <a href="#" class="nav-link" data-view="files" id="files-nav-link" hidden>Files</a>
+        <a href="#" class="nav-link" data-view="mail" id="mail-nav-link" hidden>Mail</a>
         <a href="#" class="nav-link" data-view="account">Account</a>
         <a href="#" class="nav-link" data-view="users" id="users-nav-link" hidden>Users</a>
         <a href="#" class="nav-link" data-view="roles" id="roles-nav-link" hidden>Roles</a>
@@ -272,6 +275,94 @@
         </form>
         <div id="search-list" class="article-grid section"></div>
       </div>
+    </section>
+
+    <section id="view-repos" class="view" hidden>
+
+      <div id="repos-list-page" class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Repos</h1>
+            <p>Browse public repositories from the connected git host.</p>
+          </div>
+        </div>
+        <div id="repos-list" class="article-grid"></div>
+      </div>
+
+      <section id="repos-browse-page" class="page-card" hidden>
+        <div class="section-header">
+          <div>
+            <span id="repos-browse-badge" class="badge badge-purple">owner/repo</span>
+            <h1 id="repos-browse-title">Repo</h1>
+          </div>
+          <button type="button" id="repos-browse-back-btn" class="pill">Back to repos</button>
+        </div>
+        <p id="repos-browse-path" class="muted">/</p>
+        <div id="repos-browse-list" class="ticket-grid section"></div>
+
+        <div id="repos-file-view" class="page-card section" hidden>
+          <div class="section-header">
+            <div><h2 id="repos-file-name"></h2></div>
+            <button type="button" id="repos-file-close-btn" class="pill small">Close</button>
+          </div>
+          <pre id="repos-file-content" class="markdown-body"></pre>
+        </div>
+      </section>
+
+    </section>
+
+    <section id="view-files" class="view" hidden>
+      <div class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Files</h1>
+            <p>Files uploaded to object storage.</p>
+          </div>
+        </div>
+
+        <form id="upload-form" class="ticket-form" hidden>
+          <div class="field-row">
+            <label for="upload-bucket">Bucket</label>
+            <input type="text" id="upload-bucket" value="ledger-uploads" required>
+          </div>
+          <div class="field-row">
+            <label for="upload-file">File</label>
+            <input type="file" id="upload-file" required>
+          </div>
+          <p id="upload-error" class="form-error" hidden></p>
+          <button type="submit" class="pill primary">Upload</button>
+        </form>
+
+        <div id="upload-list" class="ticket-grid section"></div>
+      </div>
+    </section>
+
+    <section id="view-mail" class="view" hidden>
+
+      <div id="mail-list-page" class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Mail</h1>
+            <p>Recent messages from the connected Gmail account.</p>
+          </div>
+        </div>
+        <div id="mail-list" class="article-grid"></div>
+        <div class="form-actions section">
+          <button type="button" id="mail-load-more-btn" class="pill small" hidden>Load more</button>
+        </div>
+      </div>
+
+      <section id="mail-view-page" class="page-card" hidden>
+        <div class="section-header">
+          <div>
+            <h1 id="mail-view-subject">Subject</h1>
+            <p id="mail-view-meta" class="muted"></p>
+          </div>
+          <button type="button" id="mail-view-back-btn" class="pill">Back to mail</button>
+        </div>
+        <pre id="mail-view-body" class="markdown-body"></pre>
+      </section>
+
     </section>
 
     <section id="view-account" class="view" hidden>

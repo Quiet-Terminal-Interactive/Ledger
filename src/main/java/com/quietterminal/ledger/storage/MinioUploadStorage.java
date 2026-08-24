@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 import com.quietterminal.ledger.error.UploadInvalidException;
 import com.quietterminal.ledger.error.UploadStorageException;
 
+import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 
@@ -38,6 +39,17 @@ public class MinioUploadStorage {
                     .build());
         } catch (Exception e) {
             throw new UploadStorageException("Failed to store upload in MinIO: " + e.getMessage());
+        }
+    }
+
+    public InputStream get(String bucket, String objectKey) {
+        try {
+            return minioClient.getObject(GetObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .build());
+        } catch (Exception e) {
+            throw new UploadStorageException("Failed to retrieve upload from MinIO: " + e.getMessage());
         }
     }
 

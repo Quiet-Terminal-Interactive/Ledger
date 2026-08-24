@@ -60,7 +60,7 @@
 
   async function api(path, options = {}) {
     const headers = Object.assign({}, options.headers);
-    if (options.body) {
+    if (options.body && !(options.body instanceof FormData)) {
       headers["Content-Type"] = "application/json";
     }
     if (state.token) {
@@ -110,6 +110,10 @@
     el("stat-role").textContent = state.user ? state.user.role : "—";
     el("users-nav-link").hidden = !hasPermission("USERS_MANAGE");
     el("roles-nav-link").hidden = !hasPermission("ROLES_MANAGE");
+    el("repos-nav-link").hidden = !hasPermission("REPOS_READ");
+    el("files-nav-link").hidden = !hasPermission("FILES_READ");
+    el("mail-nav-link").hidden = !hasPermission("MAIL_READ");
+    el("upload-form").hidden = !hasPermission("FILES_WRITE");
     switchView(window.location.hash.startsWith("#/wiki") ? "wiki" : "overview");
     checkAdmin();
     refreshHealth();
@@ -218,6 +222,17 @@
     }
     if (view === "account") {
       loadRecoveryCodeStatus();
+    }
+    if (view === "repos") {
+      showReposSubview("list");
+      loadRepoList();
+    }
+    if (view === "files") {
+      loadUploadList();
+    }
+    if (view === "mail") {
+      showMailSubview("list");
+      loadMailList();
     }
   }
 
@@ -1294,6 +1309,293 @@
     } catch (err) {
       list.innerHTML = `<p class="empty-state">${escapeHtml(err.message)}</p>`;
     }
+  });
+
+  function showReposSubview(name) {
+    el("repos-list-page").hidden = name !== "list";
+    el("repos-browse-page").hidden = name !== "browse";
+  }
+
+  async function loadRepoList() {
+    const list = el("repos-list");
+    let repos;
+    try {
+      repos = await api("/repos");
+    } catch (e) {
+      list.innerHTML = `<p class="empty-state">Couldn't load repos: ${escapeHtml(e.message)}</p>`;
+      return;
+    }
+    list.innerHTML = "";
+    if (!repos.length) {
+      list.innerHTML = `<p class="empty-state">No repos available.</p>`;
+      return;
+    }
+    repos.forEach((repo) => {
+      const card = document.createElement("div");
+      card.className = "article-card";
+      card.innerHTML = `
+        <span class="badge badge-purple">${escapeHtml(repo.owner)}</span>
+        <h3>${escapeHtml(repo.name)}</h3>
+        <p>${repo.description ? escapeHtml(repo.description) : "No description."}</p>
+      `;
+      card.addEventListener("click", () => openRepo(repo.owner, repo.name));
+      list.appendChild(card);
+    });
+  }
+
+  let currentRepo = null;
+
+  function openRepo(owner, name) {
+    currentRepo = { owner, name };
+    showReposSubview("browse");
+    el("repos-browse-badge").textContent = `${owner}/${name}`;
+    el("repos-browse-title").textContent = name;
+    el("repos-file-view").hidden = true;
+    loadRepoTree("");
+  }
+
+  async function loadRepoTree(path) {
+    el("repos-browse-path").textContent = "/" + path;
+    el("repos-file-view").hidden = true;
+    const list = el("repos-browse-list");
+    list.innerHTML = `<p class="empty-state">Loading…</p>`;
+    let entries;
+    try {
+      entries = await api(
+        `/repos/${encodeURIComponent(currentRepo.owner)}/${encodeURIComponent(currentRepo.name)}/tree?path=${encodeURIComponent(path)}`
+      );
+    } catch (e) {
+      list.innerHTML = `<p class="empty-state">Couldn't load contents: ${escapeHtml(e.message)}</p>`;
+      return;
+    }
+    list.innerHTML = "";
+    if (path) {
+      const upCard = document.createElement("div");
+      upCard.className = "ticket-card";
+      upCard.innerHTML = `<div class="ticket-card-top"><strong>.. (up)</strong></div>`;
+      upCard.addEventListener("click", () => {
+        const parts = path.split("/").filter(Boolean);
+        parts.pop();
+        loadRepoTree(parts.join("/"));
+      });
+      list.appendChild(upCard);
+    }
+    if (!entries.length) {
+      list.innerHTML += `<p class="empty-state">Empty directory.</p>`;
+      return;
+    }
+    entries.forEach((entry) => {
+      const card = document.createElement("div");
+      card.className = "ticket-card";
+      const isDir = entry.type === "dir";
+      card.innerHTML = `
+        <div class="ticket-card-top">
+          <strong>${isDir ? "📁" : "📄"} ${escapeHtml(entry.name)}</strong>
+          ${!isDir ? `<span class="badge badge-blue">${entry.size} bytes</span>` : ""}
+        </div>
+      `;
+      card.addEventListener("click", () => {
+        if (isDir) {
+          loadRepoTree(entry.path);
+        } else {
+          openRepoFile(entry.path, entry.name);
+        }
+      });
+      list.appendChild(card);
+    });
+  }
+
+  async function openRepoFile(path, name) {
+    el("repos-file-view").hidden = false;
+    el("repos-file-name").textContent = name;
+    el("repos-file-content").textContent = "Loading…";
+    try {
+      const file = await api(
+        `/repos/${encodeURIComponent(currentRepo.owner)}/${encodeURIComponent(currentRepo.name)}/file?path=${encodeURIComponent(path)}`
+      );
+      if (file.encoding === "base64" && file.content) {
+        try {
+          el("repos-file-content").textContent = atob(file.content.replace(/\n/g, ""));
+        } catch (e) {
+          el("repos-file-content").textContent = "(binary file, cannot preview)";
+        }
+      } else {
+        el("repos-file-content").textContent = file.content || "(empty file)";
+      }
+    } catch (e) {
+      el("repos-file-content").textContent = `Couldn't load file: ${e.message}`;
+    }
+  }
+
+  el("repos-browse-back-btn").addEventListener("click", () => {
+    showReposSubview("list");
+  });
+
+  el("repos-file-close-btn").addEventListener("click", () => {
+    el("repos-file-view").hidden = true;
+  });
+
+  function formatBytes(bytes) {
+    if (!bytes) return "0 B";
+    const units = ["B", "KB", "MB", "GB"];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+  }
+
+  async function loadUploadList() {
+    const list = el("upload-list");
+    let uploads;
+    try {
+      uploads = await api("/uploads");
+    } catch (e) {
+      list.innerHTML = `<p class="empty-state">Couldn't load files: ${escapeHtml(e.message)}</p>`;
+      return;
+    }
+    list.innerHTML = "";
+    if (!uploads.length) {
+      list.innerHTML = `<p class="empty-state">No files uploaded yet.</p>`;
+      return;
+    }
+    uploads.forEach((upload) => {
+      const card = document.createElement("div");
+      card.className = "ticket-card";
+      card.innerHTML = `
+        <div class="ticket-card-top">
+          <strong>${escapeHtml(upload.fileName)}</strong>
+          <span class="badge badge-orange">${escapeHtml(upload.bucket)}</span>
+        </div>
+        <div class="chip-row">
+          <span class="muted">Size:</span>
+          <span>${formatBytes(upload.sizeBytes)}</span>
+          <span class="muted">Uploaded by:</span>
+          <span>${escapeHtml(userLabel(upload.uploadedBy))}</span>
+        </div>
+        <div class="chip-row">
+          <span class="muted">Uploaded:</span>
+          <span>${formatDateTime(upload.uploadedAt)}</span>
+        </div>
+        <div class="ticket-actions">
+          <button type="button" class="pill small download-btn">Download</button>
+        </div>
+      `;
+      card.querySelector(".download-btn").addEventListener("click", () => downloadUpload(upload.id, upload.fileName));
+      list.appendChild(card);
+    });
+  }
+
+  async function downloadUpload(id, fileName) {
+    try {
+      const headers = {};
+      if (state.token) {
+        headers["Authorization"] = "Bearer " + state.token;
+      }
+      const res = await fetch(`/uploads/${id}/content`, { headers });
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(text || `Download failed (${res.status})`);
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast(err.message, true);
+    }
+  }
+
+  el("upload-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = el("upload-error");
+    errorEl.hidden = true;
+    const file = el("upload-file").files[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("bucket", el("upload-bucket").value.trim());
+    try {
+      await api("/uploads", { method: "POST", body: formData });
+      el("upload-form").reset();
+      el("upload-bucket").value = "ledger-uploads";
+      showToast("File uploaded.");
+      loadUploadList();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
+  });
+
+  function showMailSubview(name) {
+    el("mail-list-page").hidden = name !== "list";
+    el("mail-view-page").hidden = name !== "view";
+  }
+
+  let mailNextPageToken = null;
+
+  async function loadMailList(pageToken) {
+    const list = el("mail-list");
+    if (!pageToken) {
+      list.innerHTML = `<p class="empty-state">Loading…</p>`;
+    }
+    let page;
+    try {
+      const query = pageToken ? "?pageToken=" + encodeURIComponent(pageToken) : "";
+      page = await api("/email/messages" + query);
+    } catch (e) {
+      list.innerHTML = `<p class="empty-state">Couldn't load mail: ${escapeHtml(e.message)}</p>`;
+      el("mail-load-more-btn").hidden = true;
+      return;
+    }
+    if (!pageToken) {
+      list.innerHTML = "";
+    }
+    mailNextPageToken = page.nextPageToken;
+    el("mail-load-more-btn").hidden = !mailNextPageToken;
+    if (!pageToken && !page.messages.length) {
+      list.innerHTML = `<p class="empty-state">No messages.</p>`;
+      return;
+    }
+    page.messages.forEach((msg) => {
+      const card = document.createElement("div");
+      card.className = "article-card";
+      card.innerHTML = `
+        <span class="badge badge-blue">${escapeHtml(msg.from || "Unknown sender")}</span>
+        <h3>${escapeHtml(msg.subject || "(no subject)")}</h3>
+        ${msg.snippet ? `<p>${escapeHtml(msg.snippet)}</p>` : ""}
+      `;
+      card.addEventListener("click", () => openMailMessage(msg.id));
+      list.appendChild(card);
+    });
+  }
+
+  async function openMailMessage(id) {
+    showMailSubview("view");
+    el("mail-view-subject").textContent = "Loading…";
+    el("mail-view-meta").textContent = "";
+    el("mail-view-body").textContent = "";
+    try {
+      const msg = await api("/email/messages/" + encodeURIComponent(id));
+      el("mail-view-subject").textContent = msg.subject || "(no subject)";
+      el("mail-view-meta").textContent = `From: ${msg.from || "—"} · To: ${msg.to || "—"} · ${msg.date || ""}`;
+      el("mail-view-body").textContent = msg.bodyText || msg.snippet || "(no content)";
+    } catch (e) {
+      el("mail-view-subject").textContent = "Couldn't load message";
+      el("mail-view-body").textContent = e.message;
+    }
+  }
+
+  el("mail-load-more-btn").addEventListener("click", () => {
+    if (mailNextPageToken) {
+      loadMailList(mailNextPageToken);
+    }
+  });
+
+  el("mail-view-back-btn").addEventListener("click", () => {
+    showMailSubview("list");
   });
 
   loadBranding();
