@@ -103,6 +103,8 @@ public class SecurityConfig {
                             .requestMatchers(HttpMethod.GET, "/uploads/**").hasAuthority(Permission.FILES_READ.name())
                             .requestMatchers(HttpMethod.POST, "/uploads/**")
                             .hasAuthority(Permission.FILES_WRITE.name())
+                            .requestMatchers(HttpMethod.DELETE, "/uploads/**")
+                            .hasAuthority(Permission.FILES_WRITE.name())
 
                             .requestMatchers(HttpMethod.GET, "/email/**").hasAuthority(Permission.MAIL_READ.name())
                             .requestMatchers(HttpMethod.GET, "/search/**").hasAuthority(Permission.SEARCH_READ.name())

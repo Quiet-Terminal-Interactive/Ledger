@@ -114,6 +114,7 @@
     el("files-nav-link").hidden = !hasPermission("FILES_READ");
     el("mail-nav-link").hidden = !hasPermission("MAIL_READ");
     el("upload-form").hidden = !hasPermission("FILES_WRITE");
+    el("new-folder-btn").hidden = !hasPermission("FILES_WRITE");
     switchView(window.location.hash.startsWith("#/wiki") ? "wiki" : "overview");
     checkAdmin();
     refreshHealth();
@@ -1456,17 +1457,19 @@
       list.innerHTML = `<p class="empty-state">No files uploaded yet.</p>`;
       return;
     }
+    const canWrite = hasPermission("FILES_WRITE");
     uploads.forEach((upload) => {
+      const isDirectory = upload.contentType === "application/x-directory";
       const card = document.createElement("div");
       card.className = "ticket-card";
       card.innerHTML = `
         <div class="ticket-card-top">
-          <strong>${escapeHtml(upload.fileName)}</strong>
+          <strong>${isDirectory ? "📁 " : ""}${escapeHtml(upload.fileName)}</strong>
           <span class="badge badge-orange">${escapeHtml(upload.bucket)}</span>
         </div>
         <div class="chip-row">
           <span class="muted">Size:</span>
-          <span>${formatBytes(upload.sizeBytes)}</span>
+          <span>${isDirectory ? "—" : formatBytes(upload.sizeBytes)}</span>
           <span class="muted">Uploaded by:</span>
           <span>${escapeHtml(userLabel(upload.uploadedBy))}</span>
         </div>
@@ -1475,10 +1478,24 @@
           <span>${formatDateTime(upload.uploadedAt)}</span>
         </div>
         <div class="ticket-actions">
-          <button type="button" class="pill small download-btn">Download</button>
+          ${isDirectory ? "" : '<button type="button" class="pill small download-btn">Download</button>'}
+          ${canWrite ? '<button type="button" class="pill small danger delete-btn">Delete</button>' : ""}
         </div>
       `;
-      card.querySelector(".download-btn").addEventListener("click", () => downloadUpload(upload.id, upload.fileName));
+      if (!isDirectory) {
+        card.querySelector(".download-btn").addEventListener("click", () => downloadUpload(upload.id, upload.fileName));
+      }
+      if (canWrite) {
+        card.querySelector(".delete-btn").addEventListener("click", async () => {
+          try {
+            await api(`/uploads/${upload.id}`, { method: "DELETE" });
+            showToast(isDirectory ? "Folder deleted." : "File deleted.");
+            loadUploadList();
+          } catch (err) {
+            showToast(err.message, true);
+          }
+        });
+      }
       list.appendChild(card);
     });
   }
@@ -1522,6 +1539,39 @@
       el("upload-form").reset();
       el("upload-bucket").value = "ledger-uploads";
       showToast("File uploaded.");
+      loadUploadList();
+    } catch (err) {
+      errorEl.textContent = err.message;
+      errorEl.hidden = false;
+    }
+  });
+
+  el("new-folder-btn").addEventListener("click", () => {
+    el("mkdir-form").hidden = false;
+    el("new-folder-btn").hidden = true;
+  });
+
+  el("mkdir-cancel-btn").addEventListener("click", () => {
+    el("mkdir-form").hidden = true;
+    el("mkdir-form").reset();
+    el("mkdir-bucket").value = "ledger-uploads";
+    el("mkdir-error").hidden = true;
+    el("new-folder-btn").hidden = false;
+  });
+
+  el("mkdir-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const errorEl = el("mkdir-error");
+    errorEl.hidden = true;
+    const bucket = el("mkdir-bucket").value.trim();
+    const name = el("mkdir-name").value.trim();
+    try {
+      await api("/uploads/directory", { method: "POST", body: JSON.stringify({ bucket, name }) });
+      el("mkdir-form").reset();
+      el("mkdir-bucket").value = "ledger-uploads";
+      el("mkdir-form").hidden = true;
+      el("new-folder-btn").hidden = false;
+      showToast("Folder created.");
       loadUploadList();
     } catch (err) {
       errorEl.textContent = err.message;

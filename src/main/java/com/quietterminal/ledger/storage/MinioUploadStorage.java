@@ -14,6 +14,7 @@ import com.quietterminal.ledger.error.UploadStorageException;
 import io.minio.GetObjectArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 
 @Component
 public class MinioUploadStorage {
@@ -50,6 +51,17 @@ public class MinioUploadStorage {
                     .build());
         } catch (Exception e) {
             throw new UploadStorageException("Failed to retrieve upload from MinIO: " + e.getMessage());
+        }
+    }
+
+    public void remove(String bucket, String objectKey) {
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .build());
+        } catch (Exception e) {
+            throw new UploadStorageException("Failed to delete upload from MinIO: " + e.getMessage());
         }
     }
 

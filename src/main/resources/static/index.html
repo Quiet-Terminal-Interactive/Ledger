@@ -318,6 +318,7 @@
             <h1>Files</h1>
             <p>Files uploaded to object storage.</p>
           </div>
+          <button type="button" id="new-folder-btn" class="pill" hidden>New folder</button>
         </div>
 
         <form id="upload-form" class="ticket-form" hidden>
@@ -331,6 +332,22 @@
           </div>
           <p id="upload-error" class="form-error" hidden></p>
           <button type="submit" class="pill primary">Upload</button>
+        </form>
+
+        <form id="mkdir-form" class="ticket-form" hidden>
+          <div class="field-row">
+            <label for="mkdir-bucket">Bucket</label>
+            <input type="text" id="mkdir-bucket" value="ledger-uploads" required>
+          </div>
+          <div class="field-row">
+            <label for="mkdir-name">Folder name</label>
+            <input type="text" id="mkdir-name" required>
+          </div>
+          <p id="mkdir-error" class="form-error" hidden></p>
+          <div class="ticket-actions">
+            <button type="submit" class="pill primary">Create folder</button>
+            <button type="button" id="mkdir-cancel-btn" class="pill small">Cancel</button>
+          </div>
         </form>
 
         <div id="upload-list" class="ticket-grid section"></div>

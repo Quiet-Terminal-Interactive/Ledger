@@ -1,5 +1,6 @@
 package com.quietterminal.ledger.controller;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -14,10 +15,12 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,6 +42,8 @@ import com.quietterminal.ledger.storage.MinioUploadStorage;
 @RestController
 @RequestMapping("/uploads")
 public class UploadController {
+
+    private static final String DIRECTORY_CONTENT_TYPE = "application/x-directory";
 
     private final UploadRepository uploadRepository;
     private final UserRepository userRepository;
@@ -82,6 +87,30 @@ public class UploadController {
         return uploadRepository.findAllByOrderByUploadedAtDesc().stream().map(UploadController::toView).toList();
     }
 
+    @PostMapping("/directory")
+    public ResponseEntity<UploadView> createDirectory(@AuthenticationPrincipal LedgerPrincipal principal,
+            @RequestBody CreateDirectoryRequest request) {
+        String name = sanitizeDirectoryName(request.name());
+        User creator = userRepository.findById(principal.userId())
+                .orElseThrow(() -> new UserNotFoundException("No user found with id " + principal.userId() + "."));
+
+        String objectKey = UUID.randomUUID() + "-" + name + "/";
+        uploadStorage.put(request.bucket(), objectKey, new ByteArrayInputStream(new byte[0]), 0, DIRECTORY_CONTENT_TYPE);
+
+        Upload upload = new Upload(name, DIRECTORY_CONTENT_TYPE, 0, objectKey, request.bucket(), creator);
+        uploadRepository.save(upload);
+        return ResponseEntity.status(HttpStatus.CREATED).body(toView(upload));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUpload(@PathVariable("id") UUID id) {
+        Upload upload = uploadRepository.findById(id)
+                .orElseThrow(() -> new UploadNotFoundException("No upload found with id " + id + "."));
+        uploadStorage.remove(upload.getBucket(), upload.getObjectKey());
+        uploadRepository.delete(upload);
+        return ResponseEntity.noContent().build();
+    }
+
     @GetMapping("/{id}/content")
     public ResponseEntity<InputStreamResource> downloadContent(@PathVariable("id") UUID id) {
         Upload upload = uploadRepository.findById(id)
@@ -120,6 +149,17 @@ public class UploadController {
         return lastSlash >= 0 ? normalized.substring(lastSlash + 1) : normalized;
     }
 
+    private static String sanitizeDirectoryName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new UploadInvalidException("Folder name cannot be blank.");
+        }
+        String trimmed = name.trim();
+        if (trimmed.contains("/") || trimmed.contains("\\")) {
+            throw new UploadInvalidException("Folder name cannot contain slashes.");
+        }
+        return trimmed;
+    }
+
     private static UploadView toView(Upload upload) {
         return new UploadView(upload.getUUID(), upload.getFileName(), upload.getContentType(),
                 upload.getSizeBytes(), upload.getBucket(), upload.getUploadedBy().getUUID(), upload.getUploadedAt());
@@ -127,5 +167,8 @@ public class UploadController {
 
     public record UploadView(UUID id, String fileName, String contentType, long sizeBytes, String bucket,
             UUID uploadedBy, Instant uploadedAt) {
+    }
+
+    public record CreateDirectoryRequest(String bucket, String name) {
     }
 }

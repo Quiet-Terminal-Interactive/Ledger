@@ -1,6 +1,7 @@
 package com.quietterminal.ledger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -8,6 +9,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.verify;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -16,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.io.InputStream;
 import java.util.List;
+import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -130,6 +133,60 @@ class UploadIntegrationTest {
 
         List<String> names = JsonPath.read(responseJson, "$[*].fileName");
         assertEquals(List.of("second.txt", "first.txt"), names);
+    }
+
+    @Test
+    void canCreateADirectory() throws Exception {
+        String responseJson = mockMvc.perform(post("/uploads/directory")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bucket\":\"ledger-uploads-test\",\"name\":\"reports\"}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.fileName").value("reports"))
+                .andExpect(jsonPath("$.contentType").value("application/x-directory"))
+                .andExpect(jsonPath("$.sizeBytes").value(0))
+                .andExpect(jsonPath("$.bucket").value("ledger-uploads-test"))
+                .andReturn().getResponse().getContentAsString();
+
+        verify(uploadStorage).put(eq("ledger-uploads-test"), anyString(), any(InputStream.class), eq(0L),
+                eq("application/x-directory"));
+
+        String id = JsonPath.read(responseJson, "$.id");
+        Upload stored = uploadRepository.findById(UUID.fromString(id)).orElseThrow();
+        assertEquals("reports", stored.getFileName());
+        assertTrue(stored.getObjectKey().endsWith("-reports/"));
+    }
+
+    @Test
+    void creatingADirectoryWithASlashInTheNameIsRejected() throws Exception {
+        mockMvc.perform(post("/uploads/directory")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"bucket\":\"ledger-uploads-test\",\"name\":\"a/b\"}")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void deletingAnUploadRemovesItFromStorageAndTheDatabase() throws Exception {
+        String responseJson = mockMvc.perform(multipart("/uploads")
+                        .file(new MockMultipartFile("file", "notes.txt", "text/plain", "hello".getBytes()))
+                        .param("bucket", "ledger-uploads-test")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String id = JsonPath.read(responseJson, "$.id");
+
+        mockMvc.perform(delete("/uploads/{id}", id).header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isNoContent());
+
+        verify(uploadStorage).remove(eq("ledger-uploads-test"), anyString());
+        assertFalse(uploadRepository.findById(UUID.fromString(id)).isPresent());
+    }
+
+    @Test
+    void deletingAnUnknownUploadIsNotFound() throws Exception {
+        mockMvc.perform(delete("/uploads/{id}", UUID.randomUUID()).header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isNotFound());
     }
 
     private void uploadFile(String name) throws Exception {
