@@ -11,7 +11,7 @@ FROM eclipse-temurin:25-jre-alpine
 WORKDIR /app
 
 RUN addgroup -S ledger && adduser -S ledger -G ledger
-COPY --from=build /build/target/ledger-*.jar app.jar
+COPY --from=build /build/target/ledger.jar app.jar
 USER ledger
 
 EXPOSE 8080
