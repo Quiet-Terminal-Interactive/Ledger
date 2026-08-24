@@ -1,0 +1,7 @@
+{
+	email {$LEDGER_ACME_EMAIL:admin@example.invalid}
+}
+
+{$LEDGER_DOMAIN:localhost} {
+	reverse_proxy app:8080
+}

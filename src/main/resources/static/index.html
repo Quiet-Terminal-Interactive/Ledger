@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ledger</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<section id="login-screen" class="auth-container">
+  <div class="auth-box">
+    <div class="brand-row">
+      <img id="brand-logo" class="brand-mark" src="" alt="" hidden>
+      <span id="brand-mark-fallback" class="brand-mark brand-mark-fallback"></span>
+      <h1>Ledger</h1>
+    </div>
+    <p class="subtitle">Sign in to continue</p>
+
+    <div id="https-warning" class="info-box warning" hidden>
+      This server is running HTTP, consider upgrading to HTTPS for end-to-end encryption.
+    </div>
+
+    <form id="login-form">
+      <div class="form-group">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" autocomplete="current-password" required>
+      </div>
+      <p id="login-error" class="error-message" hidden></p>
+      <button type="submit" class="btn-primary">Sign in</button>
+    </form>
+    <p class="auth-alt-action" id="show-recovery-login-row">
+      <a href="#" id="show-recovery-login">Sign in with a recovery code instead</a>
+    </p>
+
+    <form id="recovery-login-form" hidden>
+      <div class="form-group">
+        <label for="recovery-login-username">Username</label>
+        <input type="text" id="recovery-login-username" autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label for="recovery-login-code">Recovery code</label>
+        <input type="text" id="recovery-login-code" placeholder="XXXXX-XXXXX" autocomplete="off" required>
+      </div>
+      <p id="recovery-login-error" class="error-message" hidden></p>
+      <button type="submit" class="btn-primary">Sign in with recovery code</button>
+    </form>
+    <p class="auth-alt-action" id="show-password-login-row" hidden>
+      <a href="#" id="show-password-login">Back to password sign-in</a>
+    </p>
+  </div>
+</section>
+
+<div id="app-shell" hidden>
+  <header class="support-header">
+    <div class="header-inner">
+      <div class="brand">
+        <strong>Ledger</strong>
+        <span class="brand-health">
+          <span id="health-dot" class="dot"></span>
+          <span id="header-health">checking health…</span>
+        </span>
+      </div>
+      <nav class="header-nav">
+        <a href="#" class="nav-link active" data-view="overview">Overview</a>
+        <a href="#" class="nav-link" data-view="tasks">Tasks</a>
+        <a href="#" class="nav-link" data-view="budget">Budget</a>
+        <a href="#" class="nav-link" data-view="wiki">Wiki</a>
+        <a href="#" class="nav-link" data-view="search">Search</a>
+        <a href="#" class="nav-link" data-view="account">Account</a>
+        <a href="#" class="nav-link" data-view="users" id="users-nav-link" hidden>Users</a>
+        <a href="#" class="nav-link" data-view="roles" id="roles-nav-link" hidden>Roles</a>
+      </nav>
+      <div class="header-actions">
+        <span id="whoami-chip" class="user-chip">—</span>
+        <button type="button" id="logout-btn" class="pill">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page-content">
+
+    <section id="view-overview" class="view">
+      <div class="page-card">
+        <h1>Overview</h1>
+        <p>Live status of this Ledger instance.</p>
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>API Health</h3>
+            <div id="stat-health" class="stat-value">—</div>
+          </div>
+          <div class="stat-card">
+            <h3>Signed in as</h3>
+            <div id="stat-user" class="stat-value">—</div>
+          </div>
+          <div class="stat-card">
+            <h3>Role</h3>
+            <div id="stat-role" class="stat-value">—</div>
+          </div>
+          <div class="stat-card">
+            <h3>Admin access</h3>
+            <div id="stat-admin" class="stat-value">—</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-tasks" class="view" hidden>
+      <div class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Tasks</h1>
+            <p>Track work, assign teammates, and manage blockers.</p>
+          </div>
+        </div>
+
+        <form id="task-form" class="ticket-form">
+          <div class="field-row">
+            <label for="task-title">Title</label>
+            <input type="text" id="task-title" required>
+          </div>
+          <div class="field-row">
+            <label for="task-description">Description</label>
+            <input type="text" id="task-description" placeholder="Optional">
+          </div>
+          <div class="field-row">
+            <label for="task-due-date">Due date</label>
+            <input type="date" id="task-due-date">
+          </div>
+          <p id="task-error" class="form-error" hidden></p>
+          <button type="submit" class="pill primary">Add task</button>
+        </form>
+
+        <div id="task-list" class="ticket-grid section"></div>
+      </div>
+    </section>
+
+    <section id="view-budget" class="view" hidden>
+      <div class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Budget</h1>
+            <p>Track income and expenses for the team.</p>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Income</h3>
+            <div id="budget-total-income" class="stat-value">—</div>
+          </div>
+          <div class="stat-card">
+            <h3>Expenses</h3>
+            <div id="budget-total-expense" class="stat-value">—</div>
+          </div>
+          <div class="stat-card">
+            <h3>Net</h3>
+            <div id="budget-total-net" class="stat-value">—</div>
+          </div>
+        </div>
+
+        <form id="budget-form" class="ticket-form section">
+          <div class="field-row">
+            <label for="budget-name">Name</label>
+            <input type="text" id="budget-name" required>
+          </div>
+          <div class="field-row">
+            <label for="budget-description">Description</label>
+            <input type="text" id="budget-description" placeholder="Optional">
+          </div>
+          <div class="field-row">
+            <label for="budget-amount">Amount</label>
+            <input type="number" id="budget-amount" step="0.01" min="0" required>
+          </div>
+          <div class="field-row">
+            <label for="budget-type">Type</label>
+            <select id="budget-type">
+              <option value="EXPENSE">Expense</option>
+              <option value="INCOME">Income</option>
+            </select>
+          </div>
+          <p id="budget-error" class="form-error" hidden></p>
+          <button type="submit" class="pill primary">Add entry</button>
+        </form>
+
+        <div id="budget-list" class="ticket-grid section"></div>
+      </div>
+    </section>
+
+    <section id="view-wiki" class="view" hidden>
+
+      <div id="wiki-list-page" class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Wiki</h1>
+            <p>Shared documentation for the team.</p>
+          </div>
+          <button type="button" id="wiki-new-btn" class="pill primary">New page</button>
+        </div>
+        <div id="wiki-list" class="article-grid"></div>
+      </div>
+
+      <section id="wiki-view-page" class="page-card" hidden>
+        <div class="section-header">
+          <div>
+            <span id="wiki-view-badge" class="badge badge-purple">/path</span>
+            <h1 id="wiki-view-title">Page title</h1>
+          </div>
+          <div class="form-actions">
+            <button type="button" id="wiki-view-edit-btn" class="pill primary">Edit</button>
+            <button type="button" id="wiki-view-back-btn" class="pill">Back to list</button>
+          </div>
+        </div>
+        <div id="wiki-view-content" class="markdown-body"></div>
+      </section>
+
+      <section id="wiki-editor-page" class="page-card article-editor" hidden>
+        <div class="section-header">
+          <div>
+            <h1 id="wiki-editor-title">New Article</h1>
+            <p>Markdown content with live preview.</p>
+          </div>
+          <button type="button" id="wiki-back-btn" class="pill">Back to list</button>
+        </div>
+
+        <p id="wiki-error" class="form-error" hidden></p>
+
+        <form id="wiki-form" class="editor-form">
+          <div class="field-row">
+            <label for="wiki-title-input">Title</label>
+            <input id="wiki-title-input" required>
+          </div>
+          <div class="field-row">
+            <label for="wiki-path-input">Path</label>
+            <input id="wiki-path-input" placeholder="/team/onboarding" required>
+          </div>
+          <div class="field-row">
+            <label for="wiki-content-input">Content (Markdown)</label>
+            <textarea id="wiki-content-input" rows="14"></textarea>
+          </div>
+          <div class="form-actions">
+            <button class="pill primary" type="submit">Save page</button>
+            <button class="pill danger" type="button" id="wiki-delete-btn" hidden>Delete page</button>
+          </div>
+        </form>
+
+        <div class="editor-preview">
+          <h2>Live Preview</h2>
+          <div class="page-card">
+            <div class="article-meta">
+              <span id="wiki-preview-path">/path</span>
+            </div>
+            <h1 id="wiki-preview-title">Page title</h1>
+            <div id="wiki-preview-content" class="markdown-body"></div>
+          </div>
+        </div>
+      </section>
+
+    </section>
+
+    <section id="view-search" class="view" hidden>
+      <div class="page-card">
+        <h1>Search</h1>
+        <p>Search across tasks, wiki pages, and uploads.</p>
+        <form id="search-form" class="search-bar">
+          <input type="text" id="search-query" placeholder="Search…" required>
+          <button type="submit">Search</button>
+        </form>
+        <div id="search-list" class="article-grid section"></div>
+      </div>
+    </section>
+
+    <section id="view-account" class="view" hidden>
+      <div class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Account</h1>
+            <p>Recovery codes let you sign in without your password if you ever get locked out.
+              They're personal to your account — an admin can't generate, view, or revoke them for
+              you.</p>
+          </div>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <h3>Codes remaining</h3>
+            <div id="recovery-codes-remaining" class="stat-value">—</div>
+          </div>
+          <div class="stat-card">
+            <h3>Last generated</h3>
+            <div id="recovery-codes-generated-at" class="stat-value">—</div>
+          </div>
+        </div>
+
+        <p id="recovery-codes-warning" class="info-box warning" hidden>
+          You don't have any recovery codes yet. Generate a set and store them somewhere safe
+          (e.g. a sealed password manager entry shared with someone you trust) so you can still
+          get in if you ever lose your password.
+        </p>
+
+        <div class="form-actions">
+          <button type="button" id="recovery-codes-generate-btn" class="pill primary">Generate new codes</button>
+          <button type="button" id="recovery-codes-revoke-btn" class="pill danger">Revoke all codes</button>
+        </div>
+
+        <div id="recovery-codes-reveal" class="page-card section" hidden>
+          <p class="info-box warning">
+            Save these now — they're shown only once and can't be recovered later. Each code works
+            once, then stops working.
+          </p>
+          <div id="recovery-codes-grid" class="recovery-codes-grid"></div>
+          <div class="form-actions">
+            <button type="button" id="recovery-codes-copy-btn" class="pill small">Copy all</button>
+            <button type="button" id="recovery-codes-dismiss-btn" class="pill small primary">I've saved these</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-users" class="view" hidden>
+      <div class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Users</h1>
+            <p>Create, edit, and remove accounts. Admin only.</p>
+          </div>
+        </div>
+
+        <form id="user-form" class="ticket-form">
+          <div class="field-row">
+            <label for="user-first-name">First name</label>
+            <input type="text" id="user-first-name" required>
+          </div>
+          <div class="field-row">
+            <label for="user-last-name">Last name</label>
+            <input type="text" id="user-last-name" required>
+          </div>
+          <div class="field-row">
+            <label for="user-username">Username</label>
+            <input type="text" id="user-username" required>
+          </div>
+          <div class="field-row">
+            <label for="user-password">Password</label>
+            <input type="password" id="user-password" required>
+          </div>
+          <div class="field-row">
+            <label for="user-role">Role</label>
+            <select id="user-role"></select>
+          </div>
+          <p id="user-error" class="form-error" hidden></p>
+          <button type="submit" class="pill primary">Create user</button>
+        </form>
+
+        <div id="user-list" class="ticket-grid section"></div>
+      </div>
+    </section>
+
+    <section id="view-roles" class="view" hidden>
+      <div class="page-card">
+        <div class="section-header">
+          <div>
+            <h1>Roles</h1>
+            <p>Define named roles and the permissions each one grants. Admin only.</p>
+          </div>
+        </div>
+
+        <form id="role-form" class="ticket-form">
+          <div class="field-row">
+            <label for="role-name">Name</label>
+            <input type="text" id="role-name" required>
+          </div>
+          <div class="field-row">
+            <label>Permissions</label>
+            <div id="role-permissions" class="checkbox-grid"></div>
+          </div>
+          <p id="role-error" class="form-error" hidden></p>
+          <button type="submit" class="pill primary">Create role</button>
+        </form>
+
+        <div id="role-list" class="ticket-grid section"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>

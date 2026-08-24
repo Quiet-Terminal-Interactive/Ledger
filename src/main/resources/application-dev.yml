@@ -1,0 +1,36 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:ledger-dev;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+  flyway:
+    enabled: false
+  h2:
+    console:
+      enabled: true
+
+ledger:
+  jwt:
+    secret: ${JWT_SECRET:dNq6Axdkpx300Z3CuzK6PEafSkNKMAm3JzWEF/Y9Czc=}
+    expiration-ms: 86400000
+  bootstrap-admin:
+    username: ${LEDGER_ADMIN_USERNAME:admin}
+    password: ${LEDGER_ADMIN_PASSWORD:admin-password}
+    first-name: Admin
+    last-name: User
+  git:
+    url: https://example.invalid
+    api-token: dev-git-token
+    listed-users: ""
+  minio:
+    endpoint: http://localhost:9000
+    access-key: dev-access-key
+    secret-key: dev-secret-key
+    buckets: ledger-uploads-dev
+  branding:
+    logo-url: ${LEDGER_LOGO_URL:}

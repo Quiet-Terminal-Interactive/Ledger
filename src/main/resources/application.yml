@@ -1,0 +1,83 @@
+spring:
+  application:
+    name: ledger
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:ledger}
+    username: ${POSTGRES_USER:ledger}
+    password: ${POSTGRES_PASSWORD:ledger}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: ${JPA_DDL_AUTO:validate}
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    locations: classpath:db/migration
+
+ledger:
+  jwt:
+    # Must be a base64-encoded key at least 256 bits long. No default on purpose; the app refuses to start without one so a real secret never gets accidentally reused.
+    # Generate one with: openssl rand -base64 32
+    secret: ${JWT_SECRET:}
+    expiration-ms: ${JWT_EXPIRATION_MS:2592000000}
+  bootstrap-admin:
+    # First-run only: if no user credentials exist yet, an admin account is created from these.
+    # Leave unset after first boot; they're ignored once any credentials exist.
+    username: ${LEDGER_ADMIN_USERNAME:}
+    password: ${LEDGER_ADMIN_PASSWORD:}
+    first-name: ${LEDGER_ADMIN_FIRST_NAME:Admin}
+    last-name: ${LEDGER_ADMIN_LAST_NAME:User}
+  git:
+    url: ${LEDGER_GIT_URL:https://pleasechange.me}
+    api-token: ${LEDGER_GIT_API_TOKEN:}
+    # Comma-separated Git usernames. Only these users' PUBLIC repos are ever shown by the file browser, regardless of what the api-token itself can see.
+    listed-users: ${LEDGER_GIT_LISTED_USERS:}
+  minio:
+    endpoint: ${LEDGER_MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${LEDGER_MINIO_ACCESS_KEY:}
+    secret-key: ${LEDGER_MINIO_SECRET_KEY:}
+    # Comma-separated bucket names. Each must already exist in MinIO; the app does not create them.
+    buckets: ${LEDGER_MINIO_BUCKETS:ledger-uploads}
+  # Notification channels below all fire on the same events: task created, assigned, blocked, completed, new upload, new wiki page, new budget entry. Each is independent and off by default; enable any combination at once. To add a channel that isn't one of these, see the "Integrations" section in the setup guide.
+  discord:
+    enabled: ${LEDGER_DISCORD_ENABLED:false}
+    webhook-url: ${LEDGER_DISCORD_WEBHOOK_URL:}
+  slack:
+    enabled: ${LEDGER_SLACK_ENABLED:false}
+    webhook-url: ${LEDGER_SLACK_WEBHOOK_URL:}
+  teams:
+    enabled: ${LEDGER_TEAMS_ENABLED:false}
+    webhook-url: ${LEDGER_TEAMS_WEBHOOK_URL:}
+  webhook:
+    enabled: ${LEDGER_WEBHOOK_ENABLED:false}
+    url: ${LEDGER_WEBHOOK_URL:}
+  gmail:
+    # Off by default. When enabled, surfaces a read-only view of a Workspace inbox via the Gmail API. client-id/client-secret are the OAuth app credentials; refresh-token is a long-lived token obtained out of band (one-time OAuth consent) for the mailbox account itself, the app always reads "me" as resolved by that token, nothing else.
+    enabled: ${LEDGER_GMAIL_ENABLED:false}
+    client-id: ${LEDGER_GMAIL_CLIENT_ID:}
+    client-secret: ${LEDGER_GMAIL_CLIENT_SECRET:}
+    refresh-token: ${LEDGER_GMAIL_REFRESH_TOKEN:}
+  # Git and Gmail above are just the two integrations that ship out of the box; both implement com.quietterminal.ledger.integration.Integration, the generic SPI for plugging in a company's own tools (Jira, Trello, Google Workspace, ...) without forking this codebase.
+  # To add a new integration, see the "Integrations" section in the setup guide.
+  budget:
+    # ISO 4217 currency code budget amounts are denominated in (e.g. USD, GBP, EUR). Defaults to USD.
+    currency: ${LEDGER_BUDGET_CURRENCY:USD}
+  branding:
+    # Optional URL to a PNG (or other image) shown next to the product name on the login page.
+    # Leave unset to fall back to the built-in mark.
+    logo-url: ${LEDGER_LOGO_URL:}
+  backup:
+    # Off by default: requires pg_dump and git on PATH, plus repo-dir already cloned with push credentials configured (e.g. an SSH deploy key mounted into the container).
+    enabled: ${LEDGER_BACKUP_ENABLED:false}
+    cron: ${LEDGER_BACKUP_CRON:0 0 3 * * *}
+    # Local path to a git clone of the internal backup repo. Dumps are written to <repo-dir>/backups and committed/pushed from there. See scripts/restore-backup.sh for the restore path.
+    repo-dir: ${LEDGER_BACKUP_REPO_DIR:}
+    git-remote: ${LEDGER_BACKUP_GIT_REMOTE:origin}
+    git-branch: ${LEDGER_BACKUP_GIT_BRANCH:main}
+    pg-dump-binary: ${LEDGER_BACKUP_PG_DUMP_BIN:pg_dump}
+    git-binary: ${LEDGER_BACKUP_GIT_BIN:git}

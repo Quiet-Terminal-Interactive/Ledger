@@ -1,0 +1,89 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ledger}
+      POSTGRES_USER: ${POSTGRES_USER:-ledger}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ledger} -d ${POSTGRES_DB:-ledger}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${LEDGER_MINIO_ACCESS_KEY:?Set LEDGER_MINIO_ACCESS_KEY in .env}
+      MINIO_ROOT_PASSWORD: ${LEDGER_MINIO_SECRET_KEY:?Set LEDGER_MINIO_SECRET_KEY in .env}
+    volumes:
+      - minio-data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${LEDGER_MINIO_ACCESS_KEY} $${LEDGER_MINIO_SECRET_KEY} &&
+      for b in $$(echo $${LEDGER_MINIO_BUCKETS:-ledger-uploads} | tr ',' ' '); do mc mb --ignore-existing local/$$b; done
+      "
+    environment:
+      LEDGER_MINIO_ACCESS_KEY: ${LEDGER_MINIO_ACCESS_KEY:?Set LEDGER_MINIO_ACCESS_KEY in .env}
+      LEDGER_MINIO_SECRET_KEY: ${LEDGER_MINIO_SECRET_KEY:?Set LEDGER_MINIO_SECRET_KEY in .env}
+      LEDGER_MINIO_BUCKETS: ${LEDGER_MINIO_BUCKETS:-ledger-uploads}
+
+  app:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      LEDGER_MINIO_ENDPOINT: http://minio:9000
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      LEDGER_DOMAIN: ${LEDGER_DOMAIN:-localhost}
+      LEDGER_ACME_EMAIL: ${LEDGER_ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+
+volumes:
+  postgres-data:
+  minio-data:
+  caddy-data:
+  caddy-config:
